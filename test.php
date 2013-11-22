@@ -31,4 +31,4 @@ mail3         A     192.0.2.5             ; IPv4 address for mail3.example.com
 STR;
 
 $zm = \ZonesManager\ZonesManager::FromString( $str );
-echo '<pre>', $zm, '</pre>';
+echo '<pre>', $zm->DebugString(), '</pre>';
