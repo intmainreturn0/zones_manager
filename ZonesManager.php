@@ -39,6 +39,27 @@ class ConfigFile
         $this->Lines[] = $line;
     }
 
+    /**
+     * @return ParsedItem|null
+     */
+    public function LastItem()
+    {
+        for( $i = count( $this->Lines ) - 1; $i >= 0; --$i )
+            if( !( $this->Lines[$i]->Item instanceof EmptyLine ) )
+                return $this->Lines[$i]->Item;
+        return null;
+    }
+
+    /**
+     * @param string $parsedItemClassName
+     * @return bool
+     */
+    public function IsLastItemOfType( $parsedItemClassName )
+    {
+        $last = $this->LastItem();
+        return $last && get_class( $last ) === __NAMESPACE__ . '\\' . $parsedItemClassName;
+    }
+
     function __toString()
     {
         return join( "\n", array_map( function ( $v )
@@ -55,11 +76,12 @@ abstract class ParsedItem
 
     /**
      * Checks if current line is of concrete type
-     * @param string $c Actual content of raw config line (without comment)
+     * @param string     $c Actual content of raw config line (without comment)
+     * @param ConfigFile $file
      * @return bool
      * @abstract
      */
-    static public function IsMy( $c )
+    static public function IsMy( $c, $file )
     {
         /* abstract, has to be overridden (static methods can't be marked abstract in php) */
     }
@@ -79,9 +101,22 @@ class UnknownContent extends ParsedItem
         return (string)$this->Content;
     }
 
-    static public function IsMy( $c )
+    static public function IsMy( $c, $file )
     {
         return true;
+    }
+}
+
+class EmptyLine extends ParsedItem
+{
+    function __toString()
+    {
+        return '';
+    }
+
+    static public function IsMy( $c, $file )
+    {
+        return rtrim( $c ) === '';
     }
 }
 
@@ -99,9 +134,49 @@ class Origin extends ParsedItem
         return '$ORIGIN ' . $this->Value;
     }
 
-    static public function IsMy( $c )
+    static public function IsMy( $c, $file )
     {
         return $c[0] === '$' && substr( $c, 0, 7 ) === '$ORIGIN' && ctype_space( $c[7] );
+    }
+}
+
+class SOAStart extends ParsedItem
+{
+    public $Domain, $Ns, $EMail;
+
+    public function __construct( $content )
+    {
+        list( $this->Domain, , , $this->Ns, $this->EMail ) = preg_split( '/\s+/', $content, -1, PREG_SPLIT_NO_EMPTY );
+    }
+
+    function __toString()
+    {
+        return sprintf( '%s   IN    SOA   %s %s (', $this->Domain, $this->Ns, $this->EMail );
+    }
+
+    static public function IsMy( $c, $file )
+    {
+        return preg_match( '/\sIN\s+SOA\s/', $c ) && strrpos( $c, '(' );
+    }
+}
+
+class SOASerial extends ParsedItem
+{
+    public $Number;
+
+    public function __construct( $content )
+    {
+        $this->Number = trim( $content );
+    }
+
+    function __toString()
+    {
+        return sprintf( '%10s%s', '', $this->Number );
+    }
+
+    static public function IsMy( $c, $file )
+    {
+        return $file->IsLastItemOfType( 'SOAStart' ) && ctype_alnum( trim( $c ) );
     }
 }
 
@@ -119,7 +194,7 @@ class TTL extends ParsedItem
         return '$TTL ' . $this->Value;
     }
 
-    static public function IsMy( $c )
+    static public function IsMy( $c, $file )
     {
         return $c[0] === '$' && substr( $c, 0, 4 ) === '$TTL' && ctype_space( $c[4] );
     }
@@ -127,6 +202,8 @@ class TTL extends ParsedItem
 
 class FileParser
 {
+    private $_file;
+
     /**
      * Convert string lines (raw config) to array of parsed lines (ConfigFile)
      * @param string[] $lines
@@ -134,13 +211,13 @@ class FileParser
      */
     public function ParseLines( $lines )
     {
-        $file = new ConfigFile();
+        $this->_file = new ConfigFile();
         foreach( $lines as $line )
         {
             $line = rtrim( $line );
-            $file->AddLine( $this->_ParseLine( $line ) );
+            $this->_file->AddLine( $this->_ParseLine( $line ) );
         }
-        return $file;
+        return $this->_file;
     }
 
     /**
@@ -163,15 +240,15 @@ class FileParser
      */
     private function _ParseActualContent( $c )
     {
-        static $classes = [ 'TTL', 'Origin' ];
+        static $classes = [ 'TTL', 'Origin', 'SOAStart', 'EmptyLine', 'SOASerial' ];
         $dest_class = 'UnknownContent';
         foreach( $classes as $c_name )
-            if( call_user_func( "\\ZonesManager\\$c_name::IsMy", $c ) )
+            if( call_user_func( "\\" . __NAMESPACE__ . "\\$c_name::IsMy", $c, $this->_file ) )
             {
                 $dest_class = $c_name;
                 break;
             }
-        $dest_class = "\\ZonesManager\\$dest_class";
+        $dest_class = "\\" . __NAMESPACE__ . "\\$dest_class";
         return new $dest_class( $c );
     }
 }
