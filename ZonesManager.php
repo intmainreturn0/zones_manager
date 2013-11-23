@@ -2,6 +2,11 @@
 
 namespace ZonesManager;
 
+class ParseZoneException extends \Exception
+{
+
+}
+
 class ConfigLine
 {
     public $Comment = null;
@@ -140,6 +145,26 @@ class Origin extends ParsedItem
     }
 }
 
+class TTL extends ParsedItem
+{
+    public $Value;
+
+    public function __construct( $text )
+    {
+        $this->Value = ltrim( substr( $text, 5 ) ); // after '$TTL '
+    }
+
+    function __toString()
+    {
+        return '$TTL ' . $this->Value;
+    }
+
+    static public function IsMy( $c, $file )
+    {
+        return $c[0] === '$' && substr( $c, 0, 4 ) === '$TTL' && ctype_space( $c[4] );
+    }
+}
+
 class SOAStart extends ParsedItem
 {
     public $Domain, $Ns, $EMail;
@@ -180,23 +205,129 @@ class SOASerial extends ParsedItem
     }
 }
 
-class TTL extends ParsedItem
+class SOARefresh extends ParsedItem
 {
     public $Value;
 
-    public function __construct( $text )
+    public function __construct( $content )
     {
-        $this->Value = ltrim( substr( $text, 5 ) ); // after '$TTL '
+        $this->Value = trim( $content );
     }
 
     function __toString()
     {
-        return '$TTL ' . $this->Value;
+        return sprintf( '%10s%s', '', $this->Value );
     }
 
     static public function IsMy( $c, $file )
     {
-        return $c[0] === '$' && substr( $c, 0, 4 ) === '$TTL' && ctype_space( $c[4] );
+        return $file->IsLastItemOfType( 'SOASerial' );
+    }
+}
+
+class SOARetry extends ParsedItem
+{
+    public $Value;
+
+    public function __construct( $content )
+    {
+        $this->Value = trim( $content );
+    }
+
+    function __toString()
+    {
+        return sprintf( '%10s%s', '', $this->Value );
+    }
+
+    static public function IsMy( $c, $file )
+    {
+        return $file->IsLastItemOfType( 'SOARefresh' );
+    }
+}
+
+class SOAExpiry extends ParsedItem
+{
+    public $Value;
+
+    public function __construct( $content )
+    {
+        $this->Value = trim( $content );
+    }
+
+    function __toString()
+    {
+        return sprintf( '%14s%s', '', $this->Value );
+    }
+
+    static public function IsMy( $c, $file )
+    {
+        return $file->IsLastItemOfType( 'SOARetry' );
+    }
+}
+
+class SOACaching extends ParsedItem
+{
+    public $Value;
+
+    public function __construct( $content )
+    {
+        $this->Value = trim( $content );
+    }
+
+    function __toString()
+    {
+        return sprintf( '%10s%s', '', $this->Value );
+    }
+
+    static public function IsMy( $c, $file )
+    {
+        return $file->IsLastItemOfType( 'SOAExpiry' );
+    }
+}
+
+class DNSEntry extends ParsedItem
+{
+    const TYPE_REGEX = '(NS|A|AAAA|TXT|CNAME|MX)';
+
+    public $Host;
+    public $IsHostOmitted;
+    public $Type;
+    public $Value;
+    public $Priority;
+
+    public function __construct( $content )
+    {
+        $parts = preg_split( '/\s+/', $content, 4, PREG_SPLIT_NO_EMPTY );
+        $idx   = 0;
+        if( preg_match( '/' . self::TYPE_REGEX . '/', $parts[0] ) )
+        {
+            $this->IsHostOmitted = true;
+            //todo Host
+            $this->Host = '???';
+        }
+        else
+        {
+            $idx                 = 1;
+            $this->IsHostOmitted = false;
+            $this->Host          = $parts[0];
+            if( !preg_match( '/^' . self::TYPE_REGEX . '$/', $parts[1] ) )
+                throw new ParseZoneException( 'Cant parse dns entry: ' . $content );
+        }
+        $this->Type = $parts[$idx++];
+        if( $this->Type === 'MX' && is_numeric( $parts[$idx] ) )
+            $this->Priority = $parts[$idx++];
+        $this->Value = isset( $parts[$idx + 1] ) ? $parts[$idx] . ' ' . $parts[$idx + 1] : $parts[$idx];
+    }
+
+    function __toString()
+    {
+        $value = $this->Type === 'MX' && $this->Priority != null ? $this->Priority . ' ' . $this->Value : $this->Value;
+        return sprintf( '%-13s %-5s %s', $this->IsHostOmitted ? '' : $this->Host, $this->Type, $value );
+    }
+
+    static public function IsMy( $c, $file )
+    {
+        return preg_match( '/\s' . self::TYPE_REGEX . '\s/', $c );
     }
 }
 
@@ -240,7 +371,7 @@ class FileParser
      */
     private function _ParseActualContent( $c )
     {
-        static $classes = [ 'TTL', 'Origin', 'SOAStart', 'EmptyLine', 'SOASerial' ];
+        static $classes = [ 'DNSEntry', 'EmptyLine', 'TTL', 'Origin', 'SOAStart', 'SOASerial', 'SOARefresh', 'SOARetry', 'SOAExpiry', 'SOACaching' ];
         $dest_class = 'UnknownContent';
         foreach( $classes as $c_name )
             if( call_user_func( "\\" . __NAMESPACE__ . "\\$c_name::IsMy", $c, $this->_file ) )
@@ -268,9 +399,16 @@ class ZonesManager
         $s = '';
         foreach( $this->_file->Lines as $line )
         {
-            $class = get_class( $line->Item ); // class with namespace
-            $class = substr( $class, strrpos( $class, '\\' ) + 1 );
-            $s .= ';;;;;;; ' . $class . "\n" . $line->__toString() . "\n\n";
+            if( $line->Item instanceof DNSEntry )
+            {
+                $info = str_replace( "\n", '    ', print_r( $line->Item, true ) );
+            }
+            else
+            {
+                $class = get_class( $line->Item ); // class with namespace
+                $info  = substr( $class, strrpos( $class, '\\' ) + 1 );
+            }
+            $s .= ';;;;;;; ' . $info . "\n" . $line->__toString() . "\n\n";
         }
         return $s;
     }

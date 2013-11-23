@@ -30,5 +30,12 @@ mail2         A     192.0.2.4             ; IPv4 address for mail2.example.com
 mail3         A     192.0.2.5             ; IPv4 address for mail3.example.com
 STR;
 
-$zm = \ZonesManager\ZonesManager::FromString( $str );
-echo '<pre>', $zm->DebugString(), '</pre>';
+try
+{
+    $zm = \ZonesManager\ZonesManager::FromString( $str );
+    echo '<pre>', $zm->DebugString(), '</pre>';
+}
+catch( Exception $ex )
+{
+    echo '<pre>Exception:<br>' . $ex->getMessage() . '</pre>';
+}
