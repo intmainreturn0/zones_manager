@@ -44,6 +44,13 @@ class ConfigFile
         $this->Lines[] = $line;
     }
 
+    public function RemoveLine( $line )
+    {
+        $index = array_search( $line, $this->Lines );
+        if( $index !== false )
+            array_splice( $this->Lines, $index, 1 );
+    }
+
     /**
      * @return ParsedItem|null
      */
@@ -76,7 +83,7 @@ class ConfigFile
             $className = '\\' . __NAMESPACE__ . '\\' . $className;
         for( $i = 0; $i < count( $this->Lines ); ++$i )
             if( !$className || $this->Lines[$i]->Item instanceof $className )
-                $callback( $this->Lines[$i]->Item, $this->Lines[$i] );
+                $callback( $this->Lines[$i]->Item, $this->Lines[$i], $i );
     }
 
     function __toString()
@@ -346,6 +353,8 @@ class DNSEntry extends ParsedItem
         if( preg_match( '/' . self::TYPE_REGEX . '/', $parts[0] ) )
         {
             $this->IsHostOmitted = true;
+            if( !$file )
+                throw new ParseZoneException( "Could not detect omitted host, because file is null" );
             for( $i = count( $file->Lines ) - 1; $i >= 0 && !$this->Host; --$i )
             {
                 $item = $file->Lines[$i]->Item;
@@ -504,9 +513,9 @@ class ZonesManager
         {
             if( $item instanceof SOAStart )
             {
-                isset( $soa['domain'] ) && ( $item->Domain = $soa['domain'] );
-                isset( $soa['email'] ) && ( $item->EMail = str_replace( '@', '.', $soa['email'] ) );
-                isset( $soa['ns'] ) && ( $item->Ns = $soa['ns'] );
+                isset( $soa['domain'] ) and $item->Domain = $soa['domain'];
+                isset( $soa['email'] ) and $item->EMail = str_replace( '@', '.', $soa['email'] );
+                isset( $soa['ns'] ) and $item->Ns = $soa['ns'];
             }
             else if( $item instanceof SOASerial && isset( $soa['serial'] ) )
                 $item->Number = $soa['serial'];
@@ -541,6 +550,100 @@ class ZonesManager
     }
 
     /**
+     * Get all dns entries (everything but SOA)
+     * @return array
+     * @see FilterDNS
+     */
+    public function GetAllDNS()
+    {
+        return $this->FilterDNS();
+    }
+
+    /**
+     * Filter all dns entries by specified parameters. All of them are optional (if null, no filter is applied to such property)
+     * @param string|null $host
+     * @param string|null $type
+     * @param int|null    $priority
+     * @return array Array of keyvalue array [ host=>...  type=>(NS|A|...)  priority=>null|int  value=>... ]
+     */
+    public function FilterDNS( $host = null, $type = null, $priority = null )
+    {
+        $zones = [ ];
+        $this->_file->EnumItems( function ( $item ) use ( &$zones, $host, $type, $priority )
+        {
+            /** @var DNSEntry $item */
+            if( !$host || $item->Host === $host && !$type || $item->Type === $type && !$priority || $item->Priority == $priority )
+                $zones[] = [ 'host' => $item->Host, 'type' => $item->Type, 'priority' => $item->Priority, 'value' => $item->Value ];
+        }, 'DNSEntry' );
+        return $zones;
+    }
+
+    /**
+     * Add new DNS entry.
+     * @param string      $host
+     * @param string      $type     NS|A|...
+     * @param string      $value
+     * @param int|null    $priority Can be specified for MX
+     * @param string|null $comment  Comment for line if config will be saved
+     */
+    public function AddDNS( $host, $type, $value, $priority = null, $comment = null )
+    {
+        $zone = new DNSEntry( "$host $type $priority $value", null );
+        $this->_file->AddLine( new ConfigLine( $zone, isset( $comment ) ? '; ' . $comment : null ) );
+    }
+
+    /**
+     * Remove DNS entry
+     * @param string   $host
+     * @param string   $type     NS|A|...
+     * @param int|null $priority Can be specified for MX (if not set and type is MX, all MX entries will be removed)
+     */
+    public function RemoveDNS( $host, $type, $priority = null )
+    {
+        $this->_file->EnumItems( function ( $item, $line, &$forIndex ) use ( $host, $type, $priority )
+        {
+            /** @var DNSEntry $item */
+            if( $item->Host === $host && $item->Type === $type && !$priority || $item->Priority == $priority )
+            {
+                $this->_file->RemoveLine( $line );
+                $forIndex--; // hack
+            }
+        }, 'DNSEntry' );
+    }
+
+    /**
+     * Replace DNS entry with new properties.
+     * All new parameters are optional: if special not set, it won't be changed.
+     */
+    public function ReplaceDNS( $oldHost, $oldType, $oldPriority = null, $newHost = null, $newType = null, $newValue = null, $newPriority = null )
+    {
+        $this->_file->EnumItems( function ( $item, $line ) use ( $oldHost, $oldType, $oldPriority, $newHost, $newType, $newValue, $newPriority )
+        {
+            /** @var DNSEntry $item */
+            if( $item->Host === $oldHost && $item->Type === $oldType && !$oldPriority || $item->Priority == $oldPriority )
+            {
+                isset( $newHost ) and $item->Host = $newHost;
+                isset( $newType ) and $item->Type = $newType;
+                isset( $newValue ) and $item->Value = $newValue;
+                isset( $newPriority ) and $item->Priority = $newPriority;
+            }
+            $this->_file->RemoveLine( $line );
+        }, 'DNSEntry' );
+    }
+
+    /**
+     * Set new value for DNS entry with specified properties.
+     * @param string   $host
+     * @param string   $type     NS|A|...
+     * @param string   $newValue A string containing new value
+     * @param int|null $priority Can be specified for MX
+     */
+    public function SetDNSValue( $host, $type, $newValue, $priority = null )
+    {
+        $this->ReplaceDNS( $host, $type, $priority, null, null, $newValue );
+    }
+
+    /**
      * @param ParsedItem $item
      * @return string
      */
@@ -551,7 +654,7 @@ class ZonesManager
         return substr( $class, strrpos( $class, '\\' ) + 1 ) . '  ' . join( '  ', array_map( function ( $prop ) use ( $item )
         {
             $val = $item->{$prop->name};
-            $val === true && $val = 'true';
+            $val === true && $val = 'true'; // represent some cases in readable format
             $val === false && $val = 'false';
             $val === null && $val = 'null';
             return "[$prop->name]=$val";

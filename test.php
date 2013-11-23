@@ -34,10 +34,12 @@ echo '<pre>';
 try
 {
     $zm = \ZonesManager\ZonesManager::FromString( $str );
-    $zm->UpdateSOASerial();
-    $zm->UpdateSOASerial();
+    //$zm->UpdateSOASerial();
+    //$zm->UpdateSOASerial();
     //echo $zm->DebugOutput();
-    var_dump( $zm->GetSOAInfo() );
+    var_dump( $zm->GetAllDNS() );
+    var_dump( $zm->FilterDNS( 'example.com.' ) );
+    var_dump( $zm->FilterDNS( null, 'MX' ) );
 }
 catch( Exception $ex )
 {
