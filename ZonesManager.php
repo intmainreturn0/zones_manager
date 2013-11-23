@@ -475,6 +475,69 @@ class ZonesManager
     }
 
     /**
+     * Get value of an item, that exists only once in a config file (e.g., Origin).
+     * @param string $className Class name (without namespace) extending ParsedItem that represents storage
+     * @param string $fieldName
+     * @return string|null
+     */
+    private function _GetSingleValue( $className, $fieldName = 'Value' )
+    {
+        $value = null;
+        $this->_file->EnumItems( function ( $v ) use ( &$value, $fieldName ) // this callback is assumed to be called once
+        {
+            $value = $v->$fieldName;
+        }, $className );
+        return $value;
+    }
+
+    /**
+     * Set value of an item, that exists only once in a config file (e.g., TTL).
+     * If an item doesn't exist in a file, it is not created.
+     * @param string $className Class name (without namespace) extending ParsedItem that represents storage
+     * @param string $newValue
+     * @param string $fieldName
+     */
+    private function _SetSingleValue( $className, $newValue, $fieldName = 'Value' )
+    {
+        $this->_file->EnumItems( function ( $v ) use ( &$newValue, $fieldName ) // this callback is assumed to be called once
+        {
+            isset( $newValue ) and $v->$fieldName = $newValue;
+        }, $className );
+    }
+
+    /**
+     * Get $ORIGIN entry value (the start of this zone file in the namespace)
+     */
+    public function GetOrigin()
+    {
+        return $this->_GetSingleValue( 'Origin' );
+    }
+
+    /**
+     * Set $ORIGIN entry value
+     */
+    public function SetOrigin( $value )
+    {
+        $this->_SetSingleValue( 'Origin', $value );
+    }
+
+    /**
+     * Get $TTL entry value (default expiration time of all resource records without their own TTL value)
+     */
+    public function GetTTL()
+    {
+        return $this->_GetSingleValue( 'TTL' );
+    }
+
+    /**
+     * Set $TTL entry value (format is arbitrary: "1h", "86400" and so on)
+     */
+    public function SetTTL( $value )
+    {
+        $this->_SetSingleValue( 'TTL', $value );
+    }
+
+    /**
      * Get all information about SOA entry.
      * @return array Array with keys like serial, ns, etc.
      */
