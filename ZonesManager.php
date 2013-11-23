@@ -7,15 +7,20 @@ class ParseZoneException extends \Exception
 
 }
 
+/**
+ * A line of parsed config. Consists of comment and actual content.
+ */
 class ConfigLine
 {
+    /** @var null|string Comment at end of line */
     public $Comment = null;
+    /** @var bool|int If set, it is x-position of comment start; helps to remain comments alignment if actual content width is changed (content is edited) */
     public $CommentStart = false;
-    /** @var ParsedItem */
+    /** @var ActualContent Actual content */
     public $Item;
 
     /**
-     * @param ParsedItem  $item
+     * @param ActualContent  $item
      * @param string|null $comment
      * @param int|bool    $commentStart
      */
@@ -34,35 +39,48 @@ class ConfigLine
     }
 }
 
+/**
+ * A parsed config file, is an array of parsed config lines.
+ * Lines can be added, removed, filtered
+ */
 class ConfigFile
 {
-    /** @var ConfigLine[] */
-    public $Lines = [ ];
+    /** @var ConfigLine[] All parsed lines in the file */
+    protected $_lines = [ ];
 
+    /**
+     * Append a line to end of file.
+     * @param ConfigLine $line
+     */
     public function AddLine( $line )
     {
-        $this->Lines[] = $line;
-    }
-
-    public function RemoveLine( $line )
-    {
-        $index = array_search( $line, $this->Lines );
-        if( $index !== false )
-            array_splice( $this->Lines, $index, 1 );
+        $this->_lines[] = $line;
     }
 
     /**
-     * @return ParsedItem|null
+     * @param int|ConfigLine $line Pointer to line or its index in Lines array
+     */
+    public function RemoveLine( $line )
+    {
+        $index = is_numeric( $line ) ? $line : array_search( $line, $this->_lines );
+        if( $index !== false && $index !== null && array_key_exists( $index, $this->_lines ) )
+            array_splice( $this->_lines, $index, 1 );
+    }
+
+    /**
+     * Get last actual item (not comment or empty line)
+     * @return ActualContent|null
      */
     public function LastItem()
     {
-        for( $i = count( $this->Lines ) - 1; $i >= 0; --$i )
-            if( !( $this->Lines[$i]->Item instanceof EmptyLine ) )
-                return $this->Lines[$i]->Item;
+        for( $i = count( $this->_lines ) - 1; $i >= 0; --$i )
+            if( !( $this->_lines[$i]->Item instanceof EmptyLine ) ) // if a line has only a comment, it's also stored as EmptyLine
+                return $this->_lines[$i]->Item;
         return null;
     }
 
     /**
+     * Checks that last (for now) actual item (not comment or empty line) is of given class.
      * @param string $parsedItemClassName
      * @return bool
      */
@@ -76,14 +94,19 @@ class ConfigFile
      * Loop through items (actual content of lines, no comments) with possible type filtering
      * @param Callback    $callback  Function to be called for each looped item (accepts $item)
      * @param string|null $className Possible class name (without namespace, local) to filter line items
+     * @param bool        $reverse   If true, cycle through last line to first (otherwise - default - from first to last)
      */
-    public function EnumItems( $callback, $className = null )
+    public function EnumItems( $callback, $className = null, $reverse = false )
     {
         if( $className !== null && $className[0] !== '\\' )
             $className = '\\' . __NAMESPACE__ . '\\' . $className;
-        for( $i = 0; $i < count( $this->Lines ); ++$i )
-            if( !$className || $this->Lines[$i]->Item instanceof $className )
-                $callback( $this->Lines[$i]->Item, $this->Lines[$i], $i );
+        for( $i = $reverse ? count( $this->_lines ) - 1 : 0; $i < count( $this->_lines ) && $i >= 0; $i += $reverse ? -1 : 1 )
+            if( !$className || $this->_lines[$i]->Item instanceof $className )
+            {
+                $res = $callback( $this->_lines[$i]->Item, $this->_lines[$i], $i );
+                if( $res === false ) // callback can return false to interrupt loop
+                    break;
+            }
     }
 
     function __toString()
@@ -92,17 +115,22 @@ class ConfigFile
         {
             /** @var $v ConfigLine */
             return $v->__toString();
-        }, $this->Lines ) );
+        }, $this->_lines ) );
     }
 }
 
-abstract class ParsedItem
+/**
+ * Represents actual content (when comments are stripped out) of one parsed line.
+ * All line-content classes must extend this.
+ * Names of available contents to parse are listed in FileParser::_ParseActualContent.
+ */
+abstract class ActualContent
 {
     abstract function __toString();
 
     /**
-     * Checks if current line is of concrete type
-     * @param string     $c Actual content of raw config line (without comment)
+     * Checks if current line content is of this concrete type
+     * @param string     $c Actual content of RAW config line (without comment)
      * @param ConfigFile $file
      * @return bool
      * @abstract
@@ -113,9 +141,9 @@ abstract class ParsedItem
     }
 }
 
-class UnknownContent extends ParsedItem
+class UnknownContent extends ActualContent
 {
-    public $Content;
+    public $Content;    // if content of line can't be recognized, then it is stored 'as is' in this class
 
     public function __construct( $content )
     {
@@ -129,11 +157,11 @@ class UnknownContent extends ParsedItem
 
     static public function IsMy( $c, $file )
     {
-        return true;
+        return true;    // this is executed when all others returned false
     }
 }
 
-class EmptyLine extends ParsedItem
+class EmptyLine extends ActualContent
 {
     function __toString()
     {
@@ -146,7 +174,7 @@ class EmptyLine extends ParsedItem
     }
 }
 
-class Origin extends ParsedItem
+class Origin extends ActualContent
 {
     public $Value;
 
@@ -166,7 +194,7 @@ class Origin extends ParsedItem
     }
 }
 
-class TTL extends ParsedItem
+class TTL extends ActualContent
 {
     public $Value;
 
@@ -186,7 +214,7 @@ class TTL extends ParsedItem
     }
 }
 
-class SOAStart extends ParsedItem
+class SOAStart extends ActualContent
 {
     const SUB_INDENT = '              ';
 
@@ -208,7 +236,7 @@ class SOAStart extends ParsedItem
     }
 }
 
-class SOASerial extends ParsedItem
+class SOASerial extends ActualContent   // SOA serial and other SOA data inside brackets should be on separate lines (this is a common format)
 {
     public $Number;
 
@@ -228,7 +256,7 @@ class SOASerial extends ParsedItem
     }
 }
 
-class SOARefresh extends ParsedItem
+class SOARefresh extends ActualContent
 {
     public $Value;
 
@@ -248,7 +276,7 @@ class SOARefresh extends ParsedItem
     }
 }
 
-class SOARetry extends ParsedItem
+class SOARetry extends ActualContent
 {
     public $Value;
 
@@ -268,7 +296,7 @@ class SOARetry extends ParsedItem
     }
 }
 
-class SOAExpiry extends ParsedItem
+class SOAExpiry extends ActualContent
 {
     public $Value;
 
@@ -288,9 +316,10 @@ class SOAExpiry extends ParsedItem
     }
 }
 
-class SOACaching extends ParsedItem
+class SOACaching extends ActualContent
 {
     public $Value;
+    /** @var bool If closing bracket is in this line (this is last proprty inside SOA brackets); if false, SOAEnd line exists */
     public $IsClosing = false;
 
     public function __construct( $content )
@@ -314,7 +343,7 @@ class SOACaching extends ParsedItem
     }
 }
 
-class SOAEnd extends ParsedItem
+class SOAEnd extends ActualContent
 {
     function __toString()
     {
@@ -327,13 +356,13 @@ class SOAEnd extends ParsedItem
     }
 }
 
-class DNSEntry extends ParsedItem
+class DNSEntry extends ActualContent
 {
     const TYPE_REGEX = '(NS|A|AAAA|TXT|CNAME|MX)';
 
     /** @var string */
     public $Host;
-    /** @var bool If line starts with Type, this is true; then Host contains value from entry above */
+    /** @var bool If line starts with Type (not with Host), this is true; then Host contains value from entry above */
     public $IsHostOmitted;
     /** @var string NS|A|... */
     public $Type;
@@ -355,14 +384,14 @@ class DNSEntry extends ParsedItem
             $this->IsHostOmitted = true;
             if( !$file )
                 throw new ParseZoneException( "Could not detect omitted host, because file is null" );
-            for( $i = count( $file->Lines ) - 1; $i >= 0 && !$this->Host; --$i )
+            $file->EnumItems( function ( $item )
             {
-                $item = $file->Lines[$i]->Item;
                 if( $item instanceof DNSEntry )
                     $this->Host = $item->Host;
                 else if( $item instanceof SOAStart )
                     $this->Host = $item->Domain;
-            }
+                return !$this->Host; // stop looping when first found
+            }, null, true );    // loop in reverse order
             if( !$this->Host )
                 throw new ParseZoneException( "Could not detect omitted host for: $content" );
         }
@@ -405,11 +434,8 @@ class FileParser
     public function ParseLines( $lines )
     {
         $this->_file = new ConfigFile();
-        foreach( $lines as $line )
-        {
-            $line = rtrim( $line );
-            $this->_file->AddLine( $this->_ParseLine( $line ) );
-        }
+        foreach( $lines as $line )  // convert each raw line to parsed line
+            $this->_file->AddLine( $this->_ParseLine( rtrim( $line ) ) );
         return $this->_file;
     }
 
@@ -429,7 +455,7 @@ class FileParser
     /**
      * Parse actual content - a line cleaned from comment
      * @param string $c Content to parse
-     * @return ParsedItem
+     * @return ActualContent
      */
     private function _ParseActualContent( $c )
     {
@@ -446,12 +472,21 @@ class FileParser
     }
 }
 
+/**
+ * External interface to this namespace.
+ * Has the functionality to parse file/strings, modify parsed content (SOA entry, TTL, add/replace dns records) and save it.
+ */
 class ZonesManager
 {
     /** @var ConfigFile */
     private $_file;
 
-    function __toString()
+    /**
+     * Generate raw config in bind9 format.
+     * It can be saved as a zone file and then parsed again.
+     * @return string
+     */
+    function GenerateConfig()
     {
         return $this->_file->__toString();
     }
@@ -680,7 +715,7 @@ class ZonesManager
      */
     public function ReplaceDNS( $oldHost, $oldType, $oldPriority = null, $newHost = null, $newType = null, $newValue = null, $newPriority = null )
     {
-        $this->_file->EnumItems( function ( $item, $line ) use ( $oldHost, $oldType, $oldPriority, $newHost, $newType, $newValue, $newPriority )
+        $this->_file->EnumItems( function ( $item ) use ( $oldHost, $oldType, $oldPriority, $newHost, $newType, $newValue, $newPriority )
         {
             /** @var DNSEntry $item */
             if( $item->Host === $oldHost && $item->Type === $oldType && !$oldPriority || $item->Priority == $oldPriority )
@@ -690,7 +725,6 @@ class ZonesManager
                 isset( $newValue ) and $item->Value = $newValue;
                 isset( $newPriority ) and $item->Priority = $newPriority;
             }
-            $this->_file->RemoveLine( $line );
         }, 'DNSEntry' );
     }
 
@@ -707,7 +741,7 @@ class ZonesManager
     }
 
     /**
-     * @param ParsedItem $item
+     * @param ActualContent $item
      * @return string
      */
     static private function _Debugtem( $item )
