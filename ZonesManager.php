@@ -167,6 +167,8 @@ class TTL extends ParsedItem
 
 class SOAStart extends ParsedItem
 {
+    const SUB_INDENT = '              ';
+
     public $Domain, $Ns, $EMail;
 
     public function __construct( $content )
@@ -176,7 +178,7 @@ class SOAStart extends ParsedItem
 
     function __toString()
     {
-        return sprintf( '%s   IN    SOA   %s %s (', $this->Domain, $this->Ns, $this->EMail );
+        return sprintf( '%-' . ( strlen( self::SUB_INDENT ) - 1 ) . 's IN    SOA   %s %s (', $this->Domain, $this->Ns, $this->EMail );
     }
 
     static public function IsMy( $c, $file )
@@ -196,7 +198,7 @@ class SOASerial extends ParsedItem
 
     function __toString()
     {
-        return sprintf( '%10s%s', '', $this->Number );
+        return SOAStart::SUB_INDENT . $this->Number;
     }
 
     static public function IsMy( $c, $file )
@@ -216,7 +218,7 @@ class SOARefresh extends ParsedItem
 
     function __toString()
     {
-        return sprintf( '%10s%s', '', $this->Value );
+        return SOAStart::SUB_INDENT . $this->Value;
     }
 
     static public function IsMy( $c, $file )
@@ -236,7 +238,7 @@ class SOARetry extends ParsedItem
 
     function __toString()
     {
-        return sprintf( '%10s%s', '', $this->Value );
+        return SOAStart::SUB_INDENT . $this->Value;
     }
 
     static public function IsMy( $c, $file )
@@ -256,7 +258,7 @@ class SOAExpiry extends ParsedItem
 
     function __toString()
     {
-        return sprintf( '%14s%s', '', $this->Value );
+        return SOAStart::SUB_INDENT . $this->Value;
     }
 
     static public function IsMy( $c, $file )
@@ -268,20 +270,39 @@ class SOAExpiry extends ParsedItem
 class SOACaching extends ParsedItem
 {
     public $Value;
+    public $IsClosing = false;
 
     public function __construct( $content )
     {
         $this->Value = trim( $content );
+        if( substr( $this->Value, -1 ) === ')' )
+        {
+            $this->IsClosing = true;
+            $this->Value     = rtrim( substr( $this->Value, 0, -1 ) );
+        }
     }
 
     function __toString()
     {
-        return sprintf( '%10s%s', '', $this->Value );
+        return SOAStart::SUB_INDENT . $this->Value . ( $this->IsClosing ? ' )' : '' );
     }
 
     static public function IsMy( $c, $file )
     {
         return $file->IsLastItemOfType( 'SOAExpiry' );
+    }
+}
+
+class SOAEnd extends ParsedItem
+{
+    function __toString()
+    {
+        return SOAStart::SUB_INDENT . ')';
+    }
+
+    static public function IsMy( $c, $file )
+    {
+        return ltrim( $c )[0] === ')';
     }
 }
 
@@ -312,10 +333,13 @@ class DNSEntry extends ParsedItem
         {
             $this->IsHostOmitted = true;
             for( $i = count( $file->Lines ) - 1; $i >= 0 && !$this->Host; --$i )
-                if( $file->Lines[$i]->Item instanceof DNSEntry )
-                    $this->Host = $file->Lines[$i]->Item->Host;
-                else if( $file->Lines[$i]->Item instanceof SOAStart )
-                    $this->Host = $file->Lines[$i]->Item->Domain;
+            {
+                $item = $file->Lines[$i]->Item;
+                if( $item instanceof DNSEntry )
+                    $this->Host = $item->Host;
+                else if( $item instanceof SOAStart )
+                    $this->Host = $item->Domain;
+            }
             if( !$this->Host )
                 throw new ParseZoneException( "Could not detect omitted host for: $content" );
         }
@@ -386,7 +410,7 @@ class FileParser
      */
     private function _ParseActualContent( $c )
     {
-        static $classes = [ 'DNSEntry', 'EmptyLine', 'TTL', 'Origin', 'SOAStart', 'SOASerial', 'SOARefresh', 'SOARetry', 'SOAExpiry', 'SOACaching' ];
+        static $classes = [ 'DNSEntry', 'EmptyLine', 'TTL', 'Origin', 'SOAStart', 'SOASerial', 'SOARefresh', 'SOARetry', 'SOAExpiry', 'SOACaching', 'SOAEnd' ];
         $dest_class = 'UnknownContent';
         foreach( $classes as $c_name )
             if( call_user_func( "\\" . __NAMESPACE__ . "\\$c_name::IsMy", $c, $this->_file ) )
