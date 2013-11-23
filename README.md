@@ -1,7 +1,7 @@
-Parse, modify and save bind9/nsd zone files
+Parse, modify and save bind9 zone files
 =====
 
-The purpose of this library is to work with [zone files](http://en.wikipedia.org/wiki/Zone_file) -- not just to parse them, but to **modify** and save, without losing comments and formatting.
+The purpose of this library is to work with [zone files](http://en.wikipedia.org/wiki/Zone_file) - not just to parse them, but to **modify** and save, without losing comments and formatting. Such files are used by bind9 and nsd.
 
 ### Usage
 
@@ -10,7 +10,7 @@ Just require ZonesManager.php and use class ZonesManager:
 $zm = \ZonesManager\ZonesManager::FromString( $str );   // or FromFile
 // get info: $zm->GetAllDNS(), $zm->FilterDNS(...), $zom->GetSOAInfo() and others
 // modify: $zm->AddDNS(...), $zm->SetTTL(...), $zm->RemoveDNS(...) and others
-echo $zm->GenerateConfig(); // raw correct bind9 config (can be saved into file via $zm->SaveFile and then be parsed again)
+echo $zm->GenerateConfig(); // raw correct bind9 config
 // echo $zm->DebugOutput(); // see details of parsed data
 ```
 
@@ -53,7 +53,7 @@ You want to parse it, get all AAAA entries, add 'mail4 A 192.0.2.6', change 'www
 ```php
     $zm   = \ZonesManager\ZonesManager::FromString( $str );
     $aaaa = $zm->FilterDNS( null, 'AAAA' );
-    // $aaaa = [ [ host=>example.com.  type=>AAAA  priority=>null  value=>2001:db8:10::1 ], [ host=>ns  type=>AAAA  priority=>null  value=>2001:db8:10::2 ] ]
+    // = [ [ host=>example.com.  type=>AAAA  priority=>null  value=>2001:db8:10::1 ], [ ... ] ]
     $zm->AddDNS( 'mail4', 'A', '192.0.2.6' );
     $zm->SetDNSValue( 'www', 'CNAME', 'sho.rt.' );
     $zm->RemoveDNS( 'wwwtest', 'CNAME' );
@@ -96,8 +96,8 @@ Note that there are some interesting features:
 
 ### Positivities
 
-* Content that can't be recognized is left as is -- so, it doesn't corrupt the file if it has unsupported format
-* It preserves comments (so, if you manually add comments to a file, then modify it with ZonesManager, they won't be deleted) (**but** yes, in the example, when we deleted 'wwwtest', whole line was deleted, with corresponding comment)
+* Content that can't be recognized is left as is - so, it doesn't corrupt the file if it has unsupported format
+* It preserves comments (so, if you manually add comments to a file, then modify it with ZonesManager, they won't be deleted)
 * Moreover: it preserves comments formatting; notice: in the example we have changed 'example.com.' to 'sho.rt.' and '4w' to '1600h', but comments at the right are properly aligned
 * Automatic updates of SOA serial on saving (format of which is YYYYMMDDRR, RR - revision of current day, starting from 00) (this is especially needed when using master/slave replication, for example via nsd-control reload)
 * Works correctly with MX priorities
