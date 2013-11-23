@@ -2,7 +2,7 @@
 
 require 'ZonesManager.php';
 
-$str = <<<'STR'
+$test1 = <<<'STR'
 $ORIGIN example.com.     ; designates the start of this zone file in the namespace
 $TTL 1h                  ; default expiration time of all resource records without their own TTL value
 example.com.  IN  SOA  ns.example.com. username.example.com. (
@@ -30,16 +30,46 @@ mail2         A     192.0.2.4             ; IPv4 address for mail2.example.com
 mail3         A     192.0.2.5             ; IPv4 address for mail3.example.com
 STR;
 
+$test2 = <<<'STR'
+$TTL 1h
+@       IN      SOA     ns1.my-ns-server.com. hostmaster.example.com. (
+    2007022600	; Serial
+    3h		; Refresh
+    1h		; Retry
+    1w		; Expiry
+    1d		; TTL
+)
+
+;;; NS ;;;
+	        NS	ns1.my-ns-server.com.
+		NS	ns.my-secondary-ns.com.
+
+;;; MX ;;;
+		MX 10	mx.example.com.
+
+;;; A ;;;
+	        A	127.0.0.1
+www		CNAME	@
+mx		A	127.0.0.1
+STR;
+
+// ----------------------------------------------------------------------------------------------------------
+
+$str = $test1;
+
+// chaos of testing
 echo '<pre>';
 try
 {
-    $zm = \ZonesManager\ZonesManager::FromString( $str );
-    //$zm->UpdateSOASerial();
-    //$zm->UpdateSOASerial();
-    //echo $zm->DebugOutput();
-    var_dump( $zm->GetAllDNS() );
-    var_dump( $zm->FilterDNS( 'example.com.' ) );
-    var_dump( $zm->FilterDNS( null, 'MX' ) );
+    $zm   = \ZonesManager\ZonesManager::FromString( $str );
+    $aaaa = $zm->FilterDNS( null, 'AAAA' );
+    var_dump( $aaaa );
+    // $aaaa = [ [ host=>example.com.  type=>AAAA  priority=>null  value=>2001:db8:10::1 ], [ host=>ns  type=>AAAA  priority=>null  value=>2001:db8:10::2 ] ]
+    $zm->AddDNS( 'mail4', 'A', '192.0.2.6' );
+    $zm->SetDNSValue( 'www', 'CNAME', 'sho.rt.' );
+    $zm->RemoveDNS( 'wwwtest', 'CNAME' );
+    $zm->SetSOAInfo( [ 'expiry' => '1600h' ] );
+    $zm->SaveFile( '/tmp/example.zone' );
 }
 catch( Exception $ex )
 {

@@ -670,7 +670,7 @@ class ZonesManager
         $this->_file->EnumItems( function ( $item ) use ( &$zones, $host, $type, $priority )
         {
             /** @var DNSEntry $item */
-            if( !$host || $item->Host === $host && !$type || $item->Type === $type && !$priority || $item->Priority == $priority )
+            if( ( !$host || $item->Host === $host ) && ( !$type || $item->Type === $type ) && ( !$priority || $item->Priority == $priority ) )
                 $zones[] = [ 'host' => $item->Host, 'type' => $item->Type, 'priority' => $item->Priority, 'value' => $item->Value ];
         }, 'DNSEntry' );
         return $zones;
@@ -701,7 +701,7 @@ class ZonesManager
         $this->_file->EnumItems( function ( $item, $line, &$forIndex ) use ( $host, $type, $priority )
         {
             /** @var DNSEntry $item */
-            if( $item->Host === $host && $item->Type === $type && !$priority || $item->Priority == $priority )
+            if( $item->Host === $host && $item->Type === $type && ( !$priority || $item->Priority == $priority ) )
             {
                 $this->_file->RemoveLine( $line );
                 $forIndex--; // hack
@@ -718,7 +718,7 @@ class ZonesManager
         $this->_file->EnumItems( function ( $item ) use ( $oldHost, $oldType, $oldPriority, $newHost, $newType, $newValue, $newPriority )
         {
             /** @var DNSEntry $item */
-            if( $item->Host === $oldHost && $item->Type === $oldType && !$oldPriority || $item->Priority == $oldPriority )
+            if( $item->Host === $oldHost && $item->Type === $oldType && ( !$oldPriority || $item->Priority == $oldPriority ) )
             {
                 isset( $newHost ) and $item->Host = $newHost;
                 isset( $newType ) and $item->Type = $newType;
@@ -742,10 +742,12 @@ class ZonesManager
 
     /**
      * Save generated config into a file. If a file exists already, it is replaced.
-     * @param string $fullFileName Full path to saving file; be sure that its directory exists before calling this.
+     * @param string $fullFileName    Full path to saving file; be sure that its directory exists before calling this.
+     * @param bool   $updateSOASerial Update serial number of SOA entry (increment current day revision or start a new day)
      */
-    public function SaveFile( $fullFileName )
+    public function SaveFile( $fullFileName, $updateSOASerial = true )
     {
+        $updateSOASerial && $this->UpdateSOASerial();
         file_put_contents( $fullFileName, $this->GenerateConfig() );
     }
 
