@@ -65,6 +65,20 @@ class ConfigFile
         return $last && get_class( $last ) === __NAMESPACE__ . '\\' . $parsedItemClassName;
     }
 
+    /**
+     * Loop through items (actual content of lines, no comments) with possible type filtering
+     * @param Callback    $callback  Function to be called for each looped item (accepts $item)
+     * @param string|null $className Possible class name (without namespace, local) to filter line items
+     */
+    public function EnumItems( $callback, $className = null )
+    {
+        if( $className !== null && $className[0] !== '\\' )
+            $className = '\\' . __NAMESPACE__ . '\\' . $className;
+        for( $i = 0; $i < count( $this->Lines ); ++$i )
+            if( !$className || $this->Lines[$i]->Item instanceof $className )
+                $callback( $this->Lines[$i]->Item, $this->Lines[$i] );
+    }
+
     function __toString()
     {
         return join( "\n", array_map( function ( $v )
@@ -433,18 +447,97 @@ class ZonesManager
         return $this->_file->__toString();
     }
 
-    function DebugString()
+    /**
+     * Debug view of parsed file
+     * @return string
+     */
+    function DebugOutput()
     {
         $s = '';
-        foreach( $this->_file->Lines as $line )
+        $this->_file->EnumItems( function ( $item, $line ) use ( &$s )
         {
-            if( $line->Item instanceof UnknownContent )
+            if( $item instanceof UnknownContent )
                 $info = 'UnknownContent';
             else
-                $info = self::_Debugtem( $line->Item );
-            $s .= ';;;;;;; ' . $info . "\n" . $line->__toString() . "\n\n";
-        }
+                $info = self::_Debugtem( $item );
+            $s .= ';;;;;;; ' . $info . "\n" . $line . "\n\n";
+        } );
         return $s;
+    }
+
+    /**
+     * Get all information about SOA entry.
+     * @return array Array with keys like serial, ns, etc.
+     */
+    public function GetSOAInfo()
+    {
+        $soa = [ ];
+        $this->_file->EnumItems( function ( $item ) use ( &$soa )
+        {
+            if( $item instanceof SOAStart )
+            {
+                $soa['domain'] = $item->Domain;
+                $soa['ns']     = $item->Ns;
+                $soa['email']  = $item->EMail;
+            }
+            else if( $item instanceof SOASerial )
+                $soa['serial'] = $item->Number;
+            else if( $item instanceof SOARefresh )
+                $soa['refresh'] = $item->Value;
+            else if( $item instanceof SOARetry )
+                $soa['retry'] = $item->Value;
+            else if( $item instanceof SOAExpiry )
+                $soa['expiry'] = $item->Value;
+            else if( $item instanceof SOACaching )
+                $soa['caching'] = $item->Value;
+        } );
+        return $soa;
+    }
+
+    /**
+     * Update information about SOA entry.
+     * @param string[] $soa Array with the same keys as in GetSOAInfo; some keys can be omitted - only existing keys are applied
+     */
+    public function SetSOAInfo( $soa )
+    {
+        $this->_file->EnumItems( function ( $item ) use ( &$soa )
+        {
+            if( $item instanceof SOAStart )
+            {
+                isset( $soa['domain'] ) && ( $item->Domain = $soa['domain'] );
+                isset( $soa['email'] ) && ( $item->EMail = str_replace( '@', '.', $soa['email'] ) );
+                isset( $soa['ns'] ) && ( $item->Ns = $soa['ns'] );
+            }
+            else if( $item instanceof SOASerial && isset( $soa['serial'] ) )
+                $item->Number = $soa['serial'];
+            else if( $item instanceof SOARefresh && isset( $soa['refresh'] ) )
+                $item->Value = $soa['refresh'];
+            else if( $item instanceof SOARetry && isset( $soa['retry'] ) )
+                $item->Value = $soa['retry'];
+            else if( $item instanceof SOAExpiry && isset( $soa['expiry'] ) )
+                $item->Value = $soa['expiry'];
+            else if( $item instanceof SOACaching && isset( $soa['caching'] ) )
+                $item->Value = $soa['caching'];
+        } );
+    }
+
+    /**
+     * Update SOA serial number. Must be called before saving a real file every time anything changed (to invalidate dns cache).
+     * Format of serial number is: YYYYMMDDRR, where:
+     *      YYYY - current year
+     *      MM   - current month
+     *      DD   - current day
+     *      RR   - revision in current day (starting from 00)
+     */
+    public function UpdateSOASerial()
+    {
+        $this->_file->EnumItems( function ( $serial )
+        {
+            /** @var SOASerial $serial */
+            $cur_date_start = date( 'Ymd' );
+            $revision       = substr( $serial->Number, 0, 8 ) === $cur_date_start ? (int)substr( $serial->Number, 8 ) + 1 : 0; // inc revision if current date
+            $serial->Number = $cur_date_start . sprintf( '%02d', $revision );
+        }, 'SOASerial' );
     }
 
     /**
@@ -465,11 +558,21 @@ class ZonesManager
         }, $o->getProperties() ) );
     }
 
+    /**
+     * Create instance from file contents
+     * @param string $fileName Full path to a readable file
+     * @return ZonesManager
+     */
     static public function FromFile( $fileName )
     {
         return self::FromString( file_get_contents( $fileName ) );
     }
 
+    /**
+     * Create instance from string containing lines of raw zone config.
+     * @param string $str Raw config (lines must be separated with \n)
+     * @return ZonesManager
+     */
     static public function FromString( $str )
     {
         $zm        = new ZonesManager();
