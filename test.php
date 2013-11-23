@@ -62,14 +62,15 @@ echo '<pre>';
 try
 {
     $zm   = \ZonesManager\ZonesManager::FromString( $str );
-    $aaaa = $zm->FilterDNS( null, 'AAAA' );
-    var_dump( $aaaa );
+    //$aaaa = $zm->FilterDNS( null, 'AAAA' );
+    //var_dump( $aaaa );
     // $aaaa = [ [ host=>example.com.  type=>AAAA  priority=>null  value=>2001:db8:10::1 ], [ host=>ns  type=>AAAA  priority=>null  value=>2001:db8:10::2 ] ]
-    $zm->AddDNS( 'mail4', 'A', '192.0.2.6' );
-    $zm->SetDNSValue( 'www', 'CNAME', 'sho.rt.' );
-    $zm->RemoveDNS( 'wwwtest', 'CNAME' );
-    $zm->SetSOAInfo( [ 'expiry' => '1600h' ] );
-    $zm->SaveFile( '/tmp/example.zone' );
+    //$zm->AddDNS( 'mail4', 'A', '192.0.2.6' );
+    //$zm->SetDNSValue( 'www', 'CNAME', 'sho.rt.' );
+    //$zm->RemoveDNS( 'wwwtest', 'CNAME' );
+    //$zm->SetSOAInfo( [ 'expiry' => '1600h' ] );
+    //$zm->SaveFile( '/tmp/example.zone' );
+    echo $zm->GenerateConfig();
 }
 catch( Exception $ex )
 {
