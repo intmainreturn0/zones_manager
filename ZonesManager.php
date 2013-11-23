@@ -289,21 +289,35 @@ class DNSEntry extends ParsedItem
 {
     const TYPE_REGEX = '(NS|A|AAAA|TXT|CNAME|MX)';
 
+    /** @var string */
     public $Host;
+    /** @var bool If line starts with Type, this is true; then Host contains value from entry above */
     public $IsHostOmitted;
+    /** @var string NS|A|... */
     public $Type;
-    public $Value;
+    /** @var int|null Priority, can be set for MX types */
     public $Priority;
+    /** @var string Value for this host */
+    public $Value;
 
-    public function __construct( $content )
+    /**
+     * @param string     $content
+     * @param ConfigFile $file
+     */
+    public function __construct( $content, $file )
     {
         $parts = preg_split( '/\s+/', $content, 4, PREG_SPLIT_NO_EMPTY );
         $idx   = 0;
         if( preg_match( '/' . self::TYPE_REGEX . '/', $parts[0] ) )
         {
             $this->IsHostOmitted = true;
-            //todo Host
-            $this->Host = '???';
+            for( $i = count( $file->Lines ) - 1; $i >= 0 && !$this->Host; --$i )
+                if( $file->Lines[$i]->Item instanceof DNSEntry )
+                    $this->Host = $file->Lines[$i]->Item->Host;
+                else if( $file->Lines[$i]->Item instanceof SOAStart )
+                    $this->Host = $file->Lines[$i]->Item->Domain;
+            if( !$this->Host )
+                throw new ParseZoneException( "Could not detect omitted host for: $content" );
         }
         else
         {
@@ -311,7 +325,7 @@ class DNSEntry extends ParsedItem
             $this->IsHostOmitted = false;
             $this->Host          = $parts[0];
             if( !preg_match( '/^' . self::TYPE_REGEX . '$/', $parts[1] ) )
-                throw new ParseZoneException( 'Cant parse dns entry: ' . $content );
+                throw new ParseZoneException( "Cant parse dns entry: $content" );
         }
         $this->Type = $parts[$idx++];
         if( $this->Type === 'MX' && is_numeric( $parts[$idx] ) )
@@ -333,6 +347,7 @@ class DNSEntry extends ParsedItem
 
 class FileParser
 {
+    /** @var ConfigFile Currently parsed file */
     private $_file;
 
     /**
@@ -380,7 +395,7 @@ class FileParser
                 break;
             }
         $dest_class = "\\" . __NAMESPACE__ . "\\$dest_class";
-        return new $dest_class( $c );
+        return new $dest_class( $c, $this->_file );
     }
 }
 
@@ -399,18 +414,31 @@ class ZonesManager
         $s = '';
         foreach( $this->_file->Lines as $line )
         {
-            if( $line->Item instanceof DNSEntry )
-            {
-                $info = str_replace( "\n", '    ', print_r( $line->Item, true ) );
-            }
+            if( $line->Item instanceof UnknownContent )
+                $info = 'UnknownContent';
             else
-            {
-                $class = get_class( $line->Item ); // class with namespace
-                $info  = substr( $class, strrpos( $class, '\\' ) + 1 );
-            }
+                $info = self::_Debugtem( $line->Item );
             $s .= ';;;;;;; ' . $info . "\n" . $line->__toString() . "\n\n";
         }
         return $s;
+    }
+
+    /**
+     * @param ParsedItem $item
+     * @return string
+     */
+    static private function _Debugtem( $item )
+    {
+        $class = get_class( $item ); // class with namespace
+        $o     = new \ReflectionObject( $item );
+        return substr( $class, strrpos( $class, '\\' ) + 1 ) . '  ' . join( '  ', array_map( function ( $prop ) use ( $item )
+        {
+            $val = $item->{$prop->name};
+            $val === true && $val = 'true';
+            $val === false && $val = 'false';
+            $val === null && $val = 'null';
+            return "[$prop->name]=$val";
+        }, $o->getProperties() ) );
     }
 
     static public function FromFile( $fileName )
