@@ -20,9 +20,9 @@ class ConfigLine
     public $Item;
 
     /**
-     * @param ActualContent  $item
-     * @param string|null $comment
-     * @param int|bool    $commentStart
+     * @param ActualContent $item
+     * @param string|null   $comment
+     * @param int|bool      $commentStart
      */
     function __construct( $item, $comment = null, $commentStart = false )
     {
@@ -143,7 +143,7 @@ abstract class ActualContent
 
 class UnknownContent extends ActualContent
 {
-    public $Content;    // if content of line can't be recognized, then it is stored 'as is' in this class
+    public $Content; // if content of line can't be recognized, then it is stored 'as is' in this class
 
     public function __construct( $content )
     {
@@ -157,7 +157,7 @@ class UnknownContent extends ActualContent
 
     static public function IsMy( $c, $file )
     {
-        return true;    // this is executed when all others returned false
+        return true; // this is executed when all others returned false
     }
 }
 
@@ -236,9 +236,9 @@ class SOAStart extends ActualContent
     }
 }
 
-class SOASerial extends ActualContent   // SOA serial and other SOA data inside brackets should be on separate lines (this is a common format)
+class SOASerial extends ActualContent // SOA serial and other SOA data inside brackets should be on separate lines (this is a common format)
 {
-    public $Number;
+    public $Number; // format: YYYYMMDDRR
 
     public function __construct( $content )
     {
@@ -391,7 +391,7 @@ class DNSEntry extends ActualContent
                 else if( $item instanceof SOAStart )
                     $this->Host = $item->Domain;
                 return !$this->Host; // stop looping when first found
-            }, null, true );    // loop in reverse order
+            }, null, true ); // loop in reverse order
             if( !$this->Host )
                 throw new ParseZoneException( "Could not detect omitted host for: $content" );
         }
@@ -434,7 +434,7 @@ class FileParser
     public function ParseLines( $lines )
     {
         $this->_file = new ConfigFile();
-        foreach( $lines as $line )  // convert each raw line to parsed line
+        foreach( $lines as $line ) // convert each raw line to parsed line
             $this->_file->AddLine( $this->_ParseLine( rtrim( $line ) ) );
         return $this->_file;
     }
@@ -503,7 +503,7 @@ class ZonesManager
             if( $item instanceof UnknownContent )
                 $info = 'UnknownContent';
             else
-                $info = self::_Debugtem( $item );
+                $info = self::_DebugItem( $item );
             $s .= ';;;;;;; ' . $info . "\n" . $line . "\n\n";
         } );
         return $s;
@@ -741,10 +741,19 @@ class ZonesManager
     }
 
     /**
+     * Save generated config into a file. If a file exists already, it is replaced.
+     * @param string $fullFileName Full path to saving file; be sure that its directory exists before calling this.
+     */
+    public function SaveFile( $fullFileName )
+    {
+        file_put_contents( $fullFileName, $this->GenerateConfig() );
+    }
+
+    /**
      * @param ActualContent $item
      * @return string
      */
-    static private function _Debugtem( $item )
+    static private function _DebugItem( $item )
     {
         $class = get_class( $item ); // class with namespace
         $o     = new \ReflectionObject( $item );
@@ -760,12 +769,12 @@ class ZonesManager
 
     /**
      * Create instance from file contents
-     * @param string $fileName Full path to a readable file
+     * @param string $fullFileName Full path to a readable file
      * @return ZonesManager
      */
-    static public function FromFile( $fileName )
+    static public function FromFile( $fullFileName )
     {
-        return self::FromString( file_get_contents( $fileName ) );
+        return self::FromString( file_get_contents( $fullFileName ) );
     }
 
     /**
