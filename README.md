@@ -100,7 +100,7 @@ Note that there are some interesting features:
 * You can open a file with ZonesManager and save it, and it does not corrupt file scructure: unknown content is left as is ([test](tests/nocorrupt.php)), comments are left and even alignment is preserved ([test](tests/comments.php)), omitted hosts are left omitted ([test](tests/omitted.php))
 * Working with SOA: get and update info ([test](tests/soa.php)) and autoupdate serial on saving ([test](tests/files.php)) (format of which is YYYYMMDDRR, RR - revision of current day, starting from 00) (this is especially needed when using master/slave replication, for example via nsd-control reload)
 * Works correctly with MX priorities ([test](tests/mx.php))
-* Works correctly with TXT entries, quotes values and backslashed semicolons ([test](tests/text.php))
+* Works correctly with TXT entries, quotes values and backslashed semicolons ([test](tests/txt.php))
 
 ### Limitations
 
