@@ -1,6 +1,6 @@
 <?
 
-require_once '../ZonesManager.php';
+file_exists( '../ZonesManager.php' ) && require_once '../ZonesManager.php';
 
 function NormalizeLineBreaks( $s )
 {
@@ -11,9 +11,14 @@ function NormalizeLineBreaks( $s )
 
 function AreConfigsEqual( $c1, $c2 )
 {
-    $c1 = trim( NormalizeLineBreaks( $c1 ) );
-    $c2 = trim( NormalizeLineBreaks( $c2 ) );
-    return $c1 == $c2;
+    $lines1 = explode( "\n", NormalizeLineBreaks( $c1 ) );
+    $lines2 = explode( "\n", NormalizeLineBreaks( $c2 ) );
+    if( count( $lines1 ) !== count( $lines2 ) )
+        return false;
+    for( $i = 0; $i < count( $lines1 ); ++$i )
+        if( preg_replace( '/\s/', '', $lines1[$i] ) !== preg_replace( '/\s/', '', $lines2[$i] ) ) // let it be just simple: equality with spaces stripped out
+            return false;
+    return true;
 }
 
 function CheckTest( $str, $expect, $callback )
@@ -25,14 +30,14 @@ function CheckTest( $str, $expect, $callback )
         $result = $zm->GenerateConfig();
         if( !AreConfigsEqual( $result, $expect ) )
         {
-            echo "<pre>Test failed with wrong answer:\n------ Got:\n$result\n------ Excected:\n$expect\n------ Test case:\n$str</pre>";
+            echo "<pre>Test failed with wrong answer:\n------ Got:\n$result\n------ Excected:\n$expect\n------ Test case:\n$str\n\n\n</pre>";
             return false;
         }
         return true;
     }
     catch( Exception $ex )
     {
-        echo "<pre>Test failed with exception: " . $ex->getMessage() . "\n------ Test case:\n$str</pre>";
+        echo "<pre>Test failed with exception: " . $ex->getMessage() . "\n------ Test case:\n$str\n\n\n</pre>";
         return false;
     }
 }
