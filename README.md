@@ -2,6 +2,7 @@ Parse, modify and save bind9 zone files
 =====
 
 The purpose of this library is to work with [zone files](http://en.wikipedia.org/wiki/Zone_file) - not just to parse them, but to **modify** and save, without losing comments and formatting. Such files are used by bind9 and nsd.
+[test link](blob/master/tests/filter_dns.php)
 
 ### Usage
 
@@ -51,14 +52,14 @@ STR;
 You want to parse it, get all AAAA entries, add 'mail4 A 192.0.2.6', change 'www CNAME' from 'example.com.' to 'sho.rt.', remove wwwtest, update SOA expiration (set '1600h') and save into a file.
 
 ```php
-    $zm   = \ZonesManager\ZonesManager::FromString( $str );
-    $aaaa = $zm->FilterDNS( null, 'AAAA' );
-    // = [ [ host=>example.com.  type=>AAAA  priority=>null  value=>2001:db8:10::1 ], [ ... ] ]
-    $zm->AddDNS( 'mail4', 'A', '192.0.2.6' );
-    $zm->SetDNSValue( 'www', 'CNAME', 'sho.rt.' );
-    $zm->RemoveDNS( 'wwwtest', 'CNAME' );
-    $zm->SetSOAInfo( [ 'expiry' => '1600h' ] );
-    $zm->SaveFile( '/tmp/example.zone' );
+$zm   = \ZonesManager\ZonesManager::FromString( $str );
+$aaaa = $zm->FilterDNS( null, 'AAAA' );
+// = [ [ host=>example.com.  type=>AAAA  priority=>null  value=>2001:db8:10::1 ], [ ... ] ]
+$zm->AddDNS( 'mail4', 'A', '192.0.2.6' );
+$zm->SetDNSValue( 'www', 'CNAME', 'sho.rt.' );
+$zm->RemoveDNS( 'wwwtest', 'CNAME' );
+$zm->SetSOAInfo( [ 'expiry' => '1600h' ] );
+$zm->SaveFile( '/tmp/example.zone' );
 ```
 
 After it, contents of /tmp/example.zone will be:
