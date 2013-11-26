@@ -407,11 +407,22 @@ class DNSEntry extends ActualContent
         if( $this->Type === 'MX' && is_numeric( $parts[$idx] ) )
             $this->Priority = $parts[$idx++];
         $this->Value = isset( $parts[$idx + 1] ) ? $parts[$idx] . ' ' . $parts[$idx + 1] : $parts[$idx];
+        $this->Value = str_replace( '\\;', ';', $this->Value );
     }
 
     function __toString()
     {
-        $value = $this->Type === 'MX' && $this->Priority != null ? $this->Priority . ' ' . $this->Value : $this->Value;
+        $value = str_replace( ';', '\\;', $this->Value );
+        switch( $this->Type )
+        {
+        case 'MX':
+            if( $this->Priority != null )
+                $value = $this->Priority . ' ' . $value;
+            break;
+        case 'TXT':
+            $value = '"' . trim( $value, '"' ) . '"'; // "asdf" => no change, asdf => "asdf", "a" " b" => no change
+            break;
+        }
         return sprintf( '%-13s %-5s %s', $this->IsHostOmitted ? '' : $this->Host, $this->Type, $value );
     }
 
@@ -446,7 +457,16 @@ class FileParser
      */
     private function _ParseLine( $line )
     {
-        $c_start        = strpos( $line, ';' );
+        // comment starts from ; but not from \; (backslashing ';' can be used in TXT entries)
+        $c_start = false;
+        for( $pos = 0; $c_start === false && $pos !== false && $pos < strlen( $line ); )
+        {
+            $pos = strpos( $line, ';', $pos );
+            if( $pos !== false && $line[$pos - 1] !== '\\' )
+                $c_start = $pos;
+            else
+                $pos++;
+        }
         $comment        = $c_start !== false ? substr( $line, $c_start ) : null; // comment itself (contains ';' and all next)
         $actual_content = $c_start !== false ? rtrim( substr( $line, 0, $c_start ) ) : $line; // before comment
         return new ConfigLine( $this->_ParseActualContent( $actual_content ), $comment, $c_start );
@@ -686,6 +706,7 @@ class ZonesManager
      */
     public function AddDNS( $host, $type, $value, $priority = null, $comment = null )
     {
+        $value = trim( $value );
         $zone = new DNSEntry( "$host $type $priority $value", null );
         $this->_file->AddLine( new ConfigLine( $zone, isset( $comment ) ? '; ' . $comment : null ) );
     }
