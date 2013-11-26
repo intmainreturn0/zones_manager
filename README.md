@@ -2,7 +2,8 @@ Parse, modify and save bind9 zone files
 =====
 
 The purpose of this library is to work with [zone files](http://en.wikipedia.org/wiki/Zone_file) - not just to parse them, but to **modify** and save, without losing comments and formatting. Such files are used by bind9 and nsd.
-[test link](blob/master/tests/filter_dns.php)
+
+[test link](tests/filter_dns.php)  [test link 2](ZonesManager.php)
 
 ### Usage
 
