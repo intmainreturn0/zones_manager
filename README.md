@@ -3,8 +3,6 @@ Parse, modify and save bind9 zone files
 
 The purpose of this library is to work with [zone files](http://en.wikipedia.org/wiki/Zone_file) - not just to parse them, but to **modify** and save, without losing comments and formatting. Such files are used by bind9 and nsd.
 
-[test link](tests/filter_dns.php)  [test link 2](ZonesManager.php)
-
 ### Usage
 
 Just require ZonesManager.php and use class ZonesManager:
@@ -96,17 +94,17 @@ mail4         A     192.0.2.6
 This saved file can be opened again using ZoneManager.
 Note that there are some interesting features:
 
-### Positivities
+### Features and positivities
 
-* Content that can't be recognized is left as is - so, it doesn't corrupt the file if it has unsupported format
-* It preserves comments (so, if you manually add comments to a file, then modify it with ZonesManager, they won't be deleted)
-* Moreover: it preserves comments formatting; notice: in the example we have changed 'example.com.' to 'sho.rt.' and '4w' to '1600h', but comments at the right are properly aligned
-* Automatic updates of SOA serial on saving (format of which is YYYYMMDDRR, RR - revision of current day, starting from 00) (this is especially needed when using master/slave replication, for example via nsd-control reload)
-* Works correctly with MX priorities
-* Works correctly with omitted hosts in dns entries (and remains them omitted on saving, nevertheless they are available in getting/filtering)
+* Parse ([test](tests/parse.php)), get scructure ([test](tests/filter_dns.php)), modify ([add](tests/add_dns.php), [replace](tests/replace_dns.php), [remove](tests/remove_dns.php), [soa](tests/soa.php)) and save ([test](tests/files.php)) bind9 format
+* You can open a file with ZonesManager and save it, and it does not corrupt file scructure: unknown content is left as is ([test](tests/nocorrupt.php)), comments are left and even alignment is preserved ([test](tests/comments.php)), omitted hosts are left omitted ([test](tests/omitted.php))
+* Working with SOA: get and update info ([test](tests/soa.php)) and autoupdate serial on saving ([test](tests/files.php)) (format of which is YYYYMMDDRR, RR - revision of current day, starting from 00) (this is especially needed when using master/slave replication, for example via nsd-control reload)
+* Works correctly with MX priorities ([test](tests/mx.php))
+* Works correctly with TXT entries, quotes values and backslashed semicolons ([test](tests/text.php))
 
 ### Limitations
 
 * No support for unique TTL for every dns entry (it's a very rare situation) (global $TTL is of course parsed correctly)
 * No support for 'IN' for dns entries ('IN' meaned 'internet', could be used in some old configs, now deprecated)
 * SOA properties (serial, refresh, retry, expiry, caching) should be one per line (it's a common case)
+* Parsed types: A,AAAA,NS,TXT,CNAME,MX. If any other type (e.g., SRV) appears in a file, it won't be recognized (and won't be available in GetAllDNS and others), but won't be corrupted (will be left as is, because it is an unknown content) ([test](tests/nocorrupt.php))
