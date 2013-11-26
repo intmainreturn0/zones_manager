@@ -2,6 +2,7 @@
 
 /*
  *  Testing saving to file (with automatic SOA serial updating)
+ *  !!! Attention! To make this test be passed, php should have rights to create file in /tmp/ directory.
  */
 
 require_once '_test_utils.php';
@@ -69,7 +70,6 @@ CheckTest( $str, $expect, function ( $zm ) use ( $expect )
     $aaaa = $zm->FilterDNS( null, 'AAAA' );
     assert( $aaaa === array( 0 => array( 'host' => 'example.com.', 'type' => 'AAAA', 'priority' => NULL, 'value' => '2001:db8:10::1', ),
                              1 => array( 'host' => 'ns', 'type' => 'AAAA', 'priority' => NULL, 'value' => '2001:db8:10::2', ), ) );
-    // = [ [ host=>example.com.  type=>AAAA  priority=>null  value=>2001:db8:10::1 ], [ ... ] ]
     $zm->AddDNS( 'mail4', 'A', '192.0.2.6' );
     $zm->SetDNSValue( 'www', 'CNAME', 'sho.rt.' );
     $zm->RemoveDNS( 'wwwtest', 'CNAME' );

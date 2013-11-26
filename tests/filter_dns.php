@@ -41,4 +41,5 @@ CheckTest( $str, $str, function ( $zm )
 
     assert( count( $zm->FilterDNS( 'a2' ) ) === 2 );
     assert( $zm->FilterDNS( 'a2', 'AAAA' ) === array( 0 => array( 'host' => 'a2', 'type' => 'AAAA', 'priority' => NULL, 'value' => '2001:db8:10::2', ), ) );
+    assert( count( $zm->GetAllDNS() ) === 11 );
 } );
