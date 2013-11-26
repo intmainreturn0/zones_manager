@@ -2,6 +2,8 @@
 
 require 'ZonesManager.php';
 
+var_dump( glob( dirname( __FILE__ ) . '/tests/*.php' ) );
+
 $test1 = <<<'STR'
 $ORIGIN example.com.     ; designates the start of this zone file in the namespace
 $TTL 1h                  ; default expiration time of all resource records without their own TTL value
