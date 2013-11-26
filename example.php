@@ -34,7 +34,6 @@ echo '<pre>';
 try
 {
     $zm   = \ZonesManager\ZonesManager::FromString( $str );
-    $zm   = \ZonesManager\ZonesManager::FromString( $str );
     $aaaa = $zm->FilterDNS( null, 'AAAA' );
     // = [ [ host=>example.com.  type=>AAAA  priority=>null  value=>2001:db8:10::1 ], [ ... ] ]
     $zm->AddDNS( 'mail4', 'A', '192.0.2.6' );
