@@ -17,7 +17,10 @@ function AreConfigsEqual( $c1, $c2 )
         return false;
     for( $i = 0; $i < count( $lines1 ); ++$i )
         if( preg_replace( '/\s/', '', $lines1[$i] ) !== preg_replace( '/\s/', '', $lines2[$i] ) ) // let it be just simple: equality with spaces stripped out
+        {
+            //echo $i;
             return false;
+        }
     return true;
 }
 

@@ -15,6 +15,6 @@ foreach( $test_files as $fn )
 
 $errors = ob_get_clean();
 if( $errors )
-    echo "<h3 style='color:red'>Some of tests failed</h3>" . $errors;
+    echo "<h3 style='color:red'>Some of tests failed</h3>\n" . $errors;
 else
     echo "<p style='color:green'>All tests passed</p>";

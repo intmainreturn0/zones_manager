@@ -1,5 +1,9 @@
 <?
 
+/*
+ *  Testing AddDNS method
+ */
+
 require_once '_test_utils.php';
 
 $str = <<<STR

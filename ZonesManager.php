@@ -751,7 +751,7 @@ class ZonesManager
     }
 
     /**
-     * Set new value for DNS entry with specified properties.
+     * Set new value for DNS entry with specified properties. A short alternative to ReplaceDNS with less amount of arguments.
      * @param string   $host
      * @param string   $type     NS|A|...
      * @param string   $newValue A string containing new value
@@ -759,7 +759,7 @@ class ZonesManager
      */
     public function SetDNSValue( $host, $type, $newValue, $priority = null )
     {
-        $this->ReplaceDNS( $host, $type, $priority, null, null, $newValue );
+        $this->ReplaceDNS( $host, $type, null, $priority, null, null, $newValue );
     }
 
     /**
