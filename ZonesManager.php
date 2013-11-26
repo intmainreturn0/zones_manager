@@ -707,22 +707,23 @@ class ZonesManager
     public function AddDNS( $host, $type, $value, $priority = null, $comment = null )
     {
         $value = trim( $value );
-        $zone = new DNSEntry( "$host $type $priority $value", null );
+        $zone  = new DNSEntry( "$host $type $priority $value", null );
         $this->_file->AddLine( new ConfigLine( $zone, isset( $comment ) ? '; ' . $comment : null ) );
     }
 
     /**
      * Remove DNS entry
-     * @param string   $host
-     * @param string   $type     NS|A|...
-     * @param int|null $priority Can be specified for MX (if not set and type is MX, all MX entries will be removed)
+     * @param string      $host
+     * @param string      $type     NS|A|...
+     * @param string|null $value    Needed to detect a single entry when there are multiple entries with equal host and type (e.g, '@ NS ns1', '@ NS ns2')
+     * @param int|null    $priority Can be specified for MX (if not set and type is MX, all MX entries will be removed)
      */
-    public function RemoveDNS( $host, $type, $priority = null )
+    public function RemoveDNS( $host, $type, $value = null, $priority = null )
     {
-        $this->_file->EnumItems( function ( $item, $line, &$forIndex ) use ( $host, $type, $priority )
+        $this->_file->EnumItems( function ( $item, $line, &$forIndex ) use ( $host, $value, $type, $priority )
         {
             /** @var DNSEntry $item */
-            if( $item->Host === $host && $item->Type === $type && ( !$priority || $item->Priority == $priority ) )
+            if( $item->Host === $host && $item->Type === $type && ( !$value || $item->Value == $value ) && ( !$priority || $item->Priority == $priority ) )
             {
                 $this->_file->RemoveLine( $line );
                 $forIndex--; // hack
@@ -734,12 +735,12 @@ class ZonesManager
      * Replace DNS entry with new properties.
      * All new parameters are optional: if special not set, it won't be changed.
      */
-    public function ReplaceDNS( $oldHost, $oldType, $oldPriority = null, $newHost = null, $newType = null, $newValue = null, $newPriority = null )
+    public function ReplaceDNS( $oldHost, $oldType, $oldValue = null, $oldPriority = null, $newHost = null, $newType = null, $newValue = null, $newPriority = null )
     {
-        $this->_file->EnumItems( function ( $item ) use ( $oldHost, $oldType, $oldPriority, $newHost, $newType, $newValue, $newPriority )
+        $this->_file->EnumItems( function ( $item ) use ( $oldHost, $oldType, $oldValue, $oldPriority, $newHost, $newType, $newValue, $newPriority )
         {
             /** @var DNSEntry $item */
-            if( $item->Host === $oldHost && $item->Type === $oldType && ( !$oldPriority || $item->Priority == $oldPriority ) )
+            if( $item->Host === $oldHost && $item->Type === $oldType && ( !$oldValue || $item->Value === $oldValue ) && ( !$oldPriority || $item->Priority == $oldPriority ) )
             {
                 isset( $newHost ) and $item->Host = $newHost;
                 isset( $newType ) and $item->Type = $newType;
