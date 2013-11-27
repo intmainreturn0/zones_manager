@@ -6,6 +6,7 @@ require_once '_test_utils.php';
 
 $str = <<<STR
 @ TXT "some\;arbitrary" " tex\;t" ; comment here
+t0 3600 IN TXT "value" "with" "multiple" "parts" " and spaces "
 STR;
 
 CheckTest( $str, $str, function ( $zm )
@@ -17,8 +18,9 @@ CheckTest( $str, $str, function ( $zm )
 // check adding and removing
 
 $expect = <<<STR
-@   TXT "some\;arbitrary" " tex\;t" ; comment here
-t1  TXT "another value"
+@       TXT "some\;arbitrary" " tex\;t" ; comment here
+t0      3600 IN  TXT "value" "with" "multiple" "parts" " and spaces "
+t1      TXT "another value"
 STR;
 
 CheckTest( $str, $expect, function ( $zm )
@@ -33,6 +35,7 @@ CheckTest( $str, $expect, function ( $zm )
 
 $expect = <<<STR
 @   TXT "some\;arbitrary" " tex\;t" ; comment here
+t0  3600 IN  TXT "value" "with" "multiple" "parts" " and spaces "
 t1  TXT "with quotes"
 t2  TXT "without quotes"
 t3  TXT "double" " value"
@@ -53,6 +56,7 @@ CheckTest( $str, $expect, function ( $zm )
 CheckTest( $expect, $expect, function ( $zm )
 {
     /** @var $zm \ZonesManager\ZonesManager */
+    assert( $zm->FilterDNS( 't0' )[0]['value'] === '"value" "with" "multiple" "parts" " and spaces "' );
     assert( $zm->FilterDNS( 't1' )[0]['value'] === '"with quotes"' );
     assert( $zm->FilterDNS( 't2' )[0]['value'] === '"without quotes"' );
     assert( $zm->FilterDNS( 't3' )[0]['value'] === '"double" " value"' );

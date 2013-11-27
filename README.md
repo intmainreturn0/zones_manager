@@ -101,10 +101,10 @@ Note that there are some interesting features:
 * Working with SOA: get and update info ([test](tests/soa.php)) and autoupdate serial on saving ([test](tests/files.php)) (format of which is YYYYMMDDRR, RR - revision of current day, starting from 00) (this is especially needed when using master/slave replication, for example via nsd-control reload)
 * Works correctly with MX priorities ([test](tests/mx.php))
 * Works correctly with TXT entries, quotes values and backslashed semicolons ([test](tests/txt.php))
+* Recognizes 'IN' marker in DNS entries (not "domain A ..." but "domain IN A ...") (that means 'INTERNET', now deprecated) and remains it on save ([test](tests/in.php))
+* Works with unique numeric TTLs per line ("domain 86400 A ...") (get, set, remove: [test](tests/ttl_perline.php))
 
 ### Limitations
 
-* No support for unique TTL for every dns entry (it's a very rare situation) (global $TTL is of course parsed correctly)
-* No support for 'IN' for dns entries ('IN' meaned 'internet', could be used in some old configs, now deprecated)
 * SOA properties (serial, refresh, retry, expiry, caching) should be one per line (it's a common case)
 * Parsed types: A,AAAA,NS,TXT,CNAME,MX. If any other type (e.g., SRV) appears in a file, it won't be recognized (and won't be available in GetAllDNS and others), but won't be corrupted (will be left as is, because it is an unknown content) ([test](tests/nocorrupt.php))

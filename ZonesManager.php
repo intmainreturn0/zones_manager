@@ -370,6 +370,10 @@ class DNSEntry extends ActualContent
     public $Priority;
     /** @var string Value for this host */
     public $Value;
+    /** @var int|null Unique TTL for this entry */
+    public $TTL;
+    /** @var bool If an entry in marked with 'IN': domain IN A ... (false, default case, is: domain A ...) */
+    public $UseIN;
 
     /**
      * @param string     $content
@@ -377,9 +381,10 @@ class DNSEntry extends ActualContent
      */
     public function __construct( $content, $file )
     {
-        $parts = preg_split( '/\s+/', $content, 4, PREG_SPLIT_NO_EMPTY );
+        $parts = preg_split( '/\s+/', $content, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_OFFSET_CAPTURE );
         $idx   = 0;
-        if( preg_match( '/' . self::TYPE_REGEX . '/', $parts[0] ) )
+        // read host; it can be omitted (if so, line starts with NS|A|... or IN, not with unique TTL: number will be treated as host)
+        if( preg_match( '/' . self::TYPE_REGEX . '/', $parts[$idx][0] ) || $parts[$idx][0] === 'IN' )
         {
             $this->IsHostOmitted = true;
             if( !$file )
@@ -397,33 +402,49 @@ class DNSEntry extends ActualContent
         }
         else
         {
-            $idx                 = 1;
             $this->IsHostOmitted = false;
-            $this->Host          = $parts[0];
-            if( !preg_match( '/^' . self::TYPE_REGEX . '$/', $parts[1] ) )
-                throw new ParseZoneException( "Cant parse dns entry: $content" );
+            $this->Host          = $parts[$idx++][0];
         }
-        $this->Type = $parts[$idx++];
-        if( $this->Type === 'MX' && is_numeric( $parts[$idx] ) )
-            $this->Priority = $parts[$idx++];
-        $this->Value = isset( $parts[$idx + 1] ) ? $parts[$idx] . ' ' . $parts[$idx + 1] : $parts[$idx];
+        // after host it may be unique TTL
+        if( is_numeric( $parts[$idx][0] ) )
+            $this->TTL = $parts[$idx++][0];
+        // after TTL may be 'IN'
+        if( $parts[$idx][0] === 'IN' )
+            $this->UseIN = !!( ++$idx ); // true
+        // after this - type
+        if( !preg_match( '/^' . self::TYPE_REGEX . '$/', $parts[$idx][0] ) )
+            throw new ParseZoneException( "Cant parse dns entry (unknown type): $content" );
+        $this->Type = $parts[$idx++][0];
+        if( $this->Type === 'MX' && is_numeric( $parts[$idx][0] ) )
+            $this->Priority = $parts[$idx++][0];
+        // all that follows type is value (it may be of many parts, spaces-separated, possible in TXT)
+        $this->Value = trim( substr( $content, $parts[$idx][1] ) );
         $this->Value = str_replace( '\\;', ';', $this->Value );
     }
 
     function __toString()
     {
+        // host
+        $s = sprintf( '%-13s ', $this->IsHostOmitted ? '' : $this->Host );
+        // ttl
+        if( $this->TTL > 0 )
+            $s .= sprintf( '%-5d ', $this->TTL );
+        // in
+        if( $this->UseIN )
+            $s .= 'IN ';
+        // type
+        $s .= sprintf( '%-5s ', $this->Type );
+        if( $this->Type === 'MX' && $this->Priority > 0 )
+            $s .= $this->Priority . ' ';
+        // value
         $value = str_replace( ';', '\\;', $this->Value );
         switch( $this->Type )
         {
-        case 'MX':
-            if( $this->Priority != null )
-                $value = $this->Priority . ' ' . $value;
-            break;
         case 'TXT':
             $value = '"' . trim( $value, '"' ) . '"'; // "asdf" => no change, asdf => "asdf", "a" " b" => no change
             break;
         }
-        return sprintf( '%-13s %-5s %s', $this->IsHostOmitted ? '' : $this->Host, $this->Type, $value );
+        return $s . $value;
     }
 
     static public function IsMy( $c, $file )
@@ -691,7 +712,11 @@ class ZonesManager
         {
             /** @var DNSEntry $item */
             if( ( !$host || $item->Host === $host ) && ( !$type || $item->Type === $type ) && ( !$priority || $item->Priority == $priority ) )
-                $zones[] = [ 'host' => $item->Host, 'type' => $item->Type, 'priority' => $item->Priority, 'value' => $item->Value ];
+            {
+                $zone = [ 'host' => $item->Host, 'type' => $item->Type, 'priority' => $item->Priority, 'value' => $item->Value ];
+                $item->TTL > 0 && ( $zone['ttl'] = $item->TTL );
+                $zones[] = $zone;
+            }
         }, 'DNSEntry' );
         return $zones;
     }
@@ -699,15 +724,17 @@ class ZonesManager
     /**
      * Add new DNS entry.
      * @param string      $host
-     * @param string      $type     NS|A|...
+     * @param string      $type      NS|A|...
      * @param string      $value
-     * @param int|null    $priority Can be specified for MX
-     * @param string|null $comment  Comment for line if config will be saved
+     * @param int|null    $priority  Can be specified for MX
+     * @param string|null $comment   Comment for line if config will be saved
+     * @param int|null    $uniqueTTL Unique TTL per line (overrides global config $TTL)
      */
-    public function AddDNS( $host, $type, $value, $priority = null, $comment = null )
+    public function AddDNS( $host, $type, $value, $priority = null, $comment = null, $uniqueTTL = null )
     {
-        $value = trim( $value );
-        $zone  = new DNSEntry( "$host $type $priority $value", null );
+        $value     = trim( $value );
+        $uniqueTTL = $uniqueTTL > 0 ? intval( $uniqueTTL ) : '';
+        $zone      = new DNSEntry( "$host $uniqueTTL $type $priority $value", null );
         $this->_file->AddLine( new ConfigLine( $zone, isset( $comment ) ? '; ' . $comment : null ) );
     }
 
@@ -735,9 +762,9 @@ class ZonesManager
      * Replace DNS entry with new properties.
      * All new parameters are optional: if special not set, it won't be changed.
      */
-    public function ReplaceDNS( $oldHost, $oldType, $oldValue = null, $oldPriority = null, $newHost = null, $newType = null, $newValue = null, $newPriority = null )
+    public function ReplaceDNS( $oldHost, $oldType, $oldValue = null, $oldPriority = null, $newHost = null, $newType = null, $newValue = null, $newPriority = null, $newUniqueTTL = null )
     {
-        $this->_file->EnumItems( function ( $item ) use ( $oldHost, $oldType, $oldValue, $oldPriority, $newHost, $newType, $newValue, $newPriority )
+        $this->_file->EnumItems( function ( $item ) use ( $oldHost, $oldType, $oldValue, $oldPriority, $newHost, $newType, $newValue, $newPriority, $newUniqueTTL )
         {
             /** @var DNSEntry $item */
             if( $item->Host === $oldHost && $item->Type === $oldType && ( !$oldValue || $item->Value === $oldValue ) && ( !$oldPriority || $item->Priority == $oldPriority ) )
@@ -746,6 +773,7 @@ class ZonesManager
                 isset( $newType ) and $item->Type = $newType;
                 isset( $newValue ) and $item->Value = $newValue;
                 isset( $newPriority ) and $item->Priority = $newPriority;
+                isset( $newUniqueTTL ) and $item->TTL = $newUniqueTTL;
             }
         }, 'DNSEntry' );
     }
