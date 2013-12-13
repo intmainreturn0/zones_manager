@@ -31,11 +31,11 @@ class ConfigLine
         $this->CommentStart = $commentStart;
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         if( !$this->Comment )
-            return $this->Item->__toString();
-        return str_pad( $this->Item->__toString(), $this->CommentStart, ' ', STR_PAD_RIGHT ) . $this->Comment;
+            return $this->Item->AsString( $file );
+        return str_pad( $this->Item->AsString( $file ), $this->CommentStart, ' ', STR_PAD_RIGHT ) . $this->Comment;
     }
 }
 
@@ -109,12 +109,12 @@ class ConfigFile
             }
     }
 
-    function __toString()
+    function AsString()
     {
         return join( "\n", array_map( function ( $v )
         {
             /** @var $v ConfigLine */
-            return $v->__toString();
+            return $v->AsString( $this );
         }, $this->_lines ) );
     }
 }
@@ -126,7 +126,7 @@ class ConfigFile
  */
 abstract class ActualContent
 {
-    abstract function __toString();
+    abstract function AsString( ConfigFile $file );
 
     /**
      * Checks if current line content is of this concrete type
@@ -150,7 +150,7 @@ class UnknownContent extends ActualContent
         $this->Content = $content;
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return (string)$this->Content;
     }
@@ -163,7 +163,7 @@ class UnknownContent extends ActualContent
 
 class EmptyLine extends ActualContent
 {
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return '';
     }
@@ -183,7 +183,7 @@ class Origin extends ActualContent
         $this->Value = ltrim( substr( $content, 8 ) ); // after '$ORIGIN '
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return '$ORIGIN ' . $this->Value;
     }
@@ -203,7 +203,7 @@ class TTL extends ActualContent
         $this->Value = ltrim( substr( $text, 5 ) ); // after '$TTL '
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return '$TTL ' . $this->Value;
     }
@@ -225,7 +225,7 @@ class SOAStart extends ActualContent
         list( $this->Domain, , , $this->Ns, $this->EMail ) = preg_split( '/\s+/', $content, -1, PREG_SPLIT_NO_EMPTY );
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return sprintf( '%-' . ( strlen( self::SUB_INDENT ) - 1 ) . 's IN    SOA   %s %s (', $this->Domain, $this->Ns, $this->EMail );
     }
@@ -245,7 +245,7 @@ class SOASerial extends ActualContent // SOA serial and other SOA data inside br
         $this->Number = trim( $content );
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return SOAStart::SUB_INDENT . $this->Number;
     }
@@ -265,7 +265,7 @@ class SOARefresh extends ActualContent
         $this->Value = trim( $content );
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return SOAStart::SUB_INDENT . $this->Value;
     }
@@ -285,7 +285,7 @@ class SOARetry extends ActualContent
         $this->Value = trim( $content );
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return SOAStart::SUB_INDENT . $this->Value;
     }
@@ -305,7 +305,7 @@ class SOAExpiry extends ActualContent
         $this->Value = trim( $content );
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return SOAStart::SUB_INDENT . $this->Value;
     }
@@ -332,7 +332,7 @@ class SOACaching extends ActualContent
         }
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return SOAStart::SUB_INDENT . $this->Value . ( $this->IsClosing ? ' )' : '' );
     }
@@ -345,7 +345,7 @@ class SOACaching extends ActualContent
 
 class SOAEnd extends ActualContent
 {
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         return SOAStart::SUB_INDENT . ')';
     }
@@ -389,14 +389,7 @@ class DNSEntry extends ActualContent
             $this->IsHostOmitted = true;
             if( !$file )
                 throw new ParseZoneException( "Could not detect omitted host, because file is null" );
-            $file->EnumItems( function ( $item )
-            {
-                if( $item instanceof DNSEntry )
-                    $this->Host = $item->Host;
-                else if( $item instanceof SOAStart )
-                    $this->Host = $item->Domain;
-                return !$this->Host; // stop looping when first found
-            }, null, true ); // loop in reverse order
+            $this->Host = self::_GetPrevHost( $file );
             if( !$this->Host )
                 throw new ParseZoneException( "Could not detect omitted host for: $content" );
         }
@@ -422,10 +415,17 @@ class DNSEntry extends ActualContent
         $this->Value = str_replace( '\\;', ';', $this->Value );
     }
 
-    function __toString()
+    function AsString( ConfigFile $file )
     {
         // host
-        $s = sprintf( '%-13s ', $this->IsHostOmitted ? '' : $this->Host );
+        if( $this->IsHostOmitted )
+        {
+            $prev_host = self::_GetPrevHost( $file, $this );
+            $out_host  = $prev_host === $this->Host ? '' : $this->Host;
+        }
+        else
+            $out_host = $this->Host;
+        $s = sprintf( '%-13s ', $out_host );
         // ttl
         if( $this->TTL > 0 )
             $s .= sprintf( '%-5d ', $this->TTL );
@@ -450,6 +450,23 @@ class DNSEntry extends ActualContent
     static public function IsMy( $c, $file )
     {
         return preg_match( '/\s' . self::TYPE_REGEX . '\s/', $c );
+    }
+
+    static private function _GetPrevHost( ConfigFile $file, DNSEntry $startFrom = null )
+    {
+        $prev_host      = '';
+        $search_started = !$startFrom;
+        $file->EnumItems( function ( $item ) use ( &$prev_host, &$search_started, $startFrom )
+        {
+            if( !$search_started )
+                return ( $search_started = $item === $startFrom ) || 1;
+            if( $item instanceof DNSEntry )
+                $prev_host = $item->Host;
+            else if( $item instanceof SOAStart )
+                $prev_host = $item->Domain;
+            return !$prev_host; // stop looping when first found
+        }, null, true );
+        return $prev_host;
     }
 }
 
@@ -529,7 +546,7 @@ class ZonesManager
      */
     function GenerateConfig()
     {
-        return $this->_file->__toString();
+        return $this->_file->AsString();
     }
 
     /**
@@ -541,11 +558,12 @@ class ZonesManager
         $s = '';
         $this->_file->EnumItems( function ( $item, $line ) use ( &$s )
         {
+            /** @var $line ConfigLine */
             if( $item instanceof UnknownContent )
                 $info = 'UnknownContent';
             else
                 $info = self::_DebugItem( $item );
-            $s .= ';;;;;;; ' . $info . "\n" . $line . "\n\n";
+            $s .= ';;;;;;; ' . $info . "\n" . $line->AsString( $this->_file ) . "\n\n";
         } );
         return $s;
     }
